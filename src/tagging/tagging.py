@@ -7,7 +7,6 @@ import torchaudio.functional as TAF
 
 from audioset_convnext_inf.pytorch.convnext import ConvNeXt
 from audioset_convnext_inf.utils.utilities import read_audioset_label_tags
-from flask import Flask, request, jsonify
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
