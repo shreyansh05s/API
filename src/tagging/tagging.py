@@ -10,6 +10,7 @@ from audioset_convnext_inf.utils.utilities import read_audioset_label_tags
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
+from opensearchpy import OpenSearch
 
 # model_fpath="topel/ConvNeXt-Tiny-AT"
 
@@ -73,6 +74,32 @@ def process_audio(audio_name, model_fpath="topel/ConvNeXt-Tiny-AT", threshold=0.
   with torch.no_grad():
     model.eval()
     output = model.forward_frame_embeddings(waveform)
+
+  # Initialize OpenSearch client
+  client = OpenSearch(
+    hosts=[{'host': 'localhost', 'port': 9200}],
+    http_auth=('admin', 'admin'),
+    use_ssl=False,
+    verify_certs=False,
+    ssl_assert_hostname=False,
+    ssl_show_warn=False,
+  )
+
+  # Prepare data to be indexed
+  document = {
+    "audio_name": audio_name,
+    "labels": [ix_to_lb[l] for l in sample_labels],
+    "probabilities": probs[0].tolist()
+  }
+
+  # Index the document
+  response = client.index(
+    index="audio_labels",
+    body=document,
+    refresh=True
+  )
+
+  print(response)
   
   return ix_to_lb, probs, sample_labels
 
