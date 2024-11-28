@@ -22,3 +22,38 @@ try:
     st.write("Label Studio Projects:", response.json())
 except requests.ConnectionError:
     st.write("Error: Unable to connect to Label Studio.")
+
+# File upload section
+uploaded_file = st.file_uploader("Choose a file", type=["wav", "mp3"])
+tagging_response = None
+if uploaded_file is not None:
+    st.write("Filename:", uploaded_file.name)
+    
+    # Display file content
+    file_content = uploaded_file.read()
+    st.audio(file_content, format='audio/wav')
+
+    # Submit button
+    if st.button("Submit"):
+        # Replace 'your_api_url' with the actual API endpoint
+        api_url = "http://your-api-service/upload"
+        
+        # Send file to the API
+        files = {"file": (uploaded_file.name, file_content)}
+        tagging_response = requests.post(api_url, files=files)
+        
+        if response.status_code == 200:
+            st.write("File successfully uploaded.")
+        else:
+            st.write("Error: File upload failed.")
+else:
+    st.error("No file is provided")
+
+if tagging_response is not None:
+    try:
+        response_data = tagging_response.json()
+        st.write("Tagging Response:")
+        for key, value in response_data.items():
+            st.write(f"{key}: {value}")
+    except ValueError:
+        st.write("Error: Unable to parse tagging response.")
