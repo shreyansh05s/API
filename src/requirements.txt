@@ -1,5 +1,7 @@
 numpy
 torch
-torch.nn
 torchaudio
 towhee
+fastapi
+uvicorn
+opensearch-py

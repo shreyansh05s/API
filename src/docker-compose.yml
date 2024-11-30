@@ -46,6 +46,14 @@ services:
     networks:
       - app-network
 
+  tagging:
+    build:
+      context: ./tagging
+      dockerfile: Dockerfile
+    container_name: tagging
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: host
