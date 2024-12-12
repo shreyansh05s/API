@@ -36,8 +36,8 @@ if uploaded_file is not None:
     # Submit button
     if st.button("Submit"):
         # Replace 'your_api_url' with the actual API endpoint
-        tagging_api_url = "http://localhost/process_audio"
-        embedding_api_url = "http://your-api-service/upload"
+        tagging_api_url = "http://tagging:8000/process_audio"
+        # embedding_api_url = "http://your-api-service/upload"
         
         # Send file to the API
         files = {"file": (uploaded_file.name, file_content)}
