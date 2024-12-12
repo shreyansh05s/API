@@ -30,6 +30,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   sample_rate = 32000
   audio_target_length = 10 * sample_rate
 
+  # Resampling to 32K 
   waveform, sample_rate_ = torchaudio.load(AUDIO_PATH)
   if sample_rate_ != sample_rate:
     waveform = TAF.resample(
@@ -38,31 +39,55 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
       sample_rate,
     )
 
+  # clipping to the desired length
+  # ToDo:   Clip the entire audio file into 10s clips
   if waveform.shape[-1] < audio_target_length:
     missing = max(audio_target_length - waveform.shape[-1], 0)
     waveform = TF.pad(waveform, (0, missing), mode="constant", value=0.0)
   elif waveform.shape[-1] > audio_target_length:
     waveform = waveform[:, :audio_target_length]
+    clips = []
+    step = sample_rate * 7  # 10 seconds - 3 seconds overlap
+    for start in range(0, waveform.shape[-1], step):
+      end = start + audio_target_length
+      clip = waveform[:, start:end]
+      if clip.shape[-1] < audio_target_length:
+        missing = max(audio_target_length - clip.shape[-1], 0)
+        clip = TF.pad(clip, (0, missing), mode="constant", value=0.0)
+      clip = clip.contiguous()
+      clips.append(clip)
 
-  waveform = waveform.contiguous()
-  waveform = waveform.to(device)
-
-  with torch.no_grad():
-    model.eval()
-    output = model(waveform)
-
-  logits = output["clipwise_logits"]
-
-  probs = output["clipwise_output"]
-
+  # waveform = waveform.contiguous()
+  # waveform = waveform.to(device)
   current_dir = os.getcwd()
-  lb_to_ix, ix_to_lb, id_to_ix, ix_to_id = read_audioset_label_tags(os.path.join(current_dir, "class_labels_indices.csv"))
+  all_clips_data = []
+  clip_labels = []
+  i = 0
+  for clip in clips:
+    clip = clip.to(device)
+    with torch.no_grad():
+      model.eval()
+      output = model(clip)
 
+      # Gettings logits and probabilities
+      logits = output["clipwise_logits"]
+      probs = output["clipwise_output"]
+
+      lb_to_ix, ix_to_lb, id_to_ix, ix_to_id = read_audioset_label_tags(os.path.join(current_dir, "class_labels_indices.csv"))
+      # Append data for each clip
+      clip_labels = np.where(probs[0].clone().detach().cpu() > threshold)[0]
+      clip_data = {
+        "clip_position": i,
+        "clip_labels": [ix_to_lb[l] for l in clip_labels],
+        "clip_probabilities": probs[0].tolist()
+      }
+      all_clips_data.append(clip_data)
+      ++i;
   # Label derivation
-  sample_labels = np.where(probs[0].clone().detach().cpu() > threshold)[0]
-  print(sample_labels)
-  for l in sample_labels:
-    print("%s: %.3f" % (ix_to_lb[l], probs[0, l]))
+  # sample_labels = np.where(probs[0].clone().detach().cpu() > threshold)[0]
+  # print(sample_labels)
+  # for l in sample_labels:
+  #   print("%s: %.3f" % (ix_to_lb[l], probs[0, l]))
 
   # Scene level embeddings
   with torch.no_grad():
@@ -87,8 +112,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   # Prepare data to be indexed
   document = {
     "audio_name": audio_name,
-    "labels": [ix_to_lb[l] for l in sample_labels],
-    "probabilities": probs[0].tolist()
+    "clip_information": all_clips_data
   }
 
   # Index the document
@@ -100,7 +124,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
 
   print(response)
   
-  return ix_to_lb, probs, sample_labels
+  return ix_to_lb, probs, clip_labels
 
 
 app = FastAPI()
