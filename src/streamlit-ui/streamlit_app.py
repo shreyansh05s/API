@@ -41,7 +41,6 @@ if uploaded_file is not None:
         
         # Send file to the API
         files = {"file": (uploaded_file.name, file_content)}
-        tagging_response = requests.post(tagging_api_url, files=files)
         tagging_response = requests.post(tagging_api_url, files=files, data={"filename": uploaded_file.name})
         embedding_response = requests.post(embedding_api_url, files=files, data={"filename": uploaded_file.name})
         

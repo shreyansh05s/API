@@ -16,6 +16,9 @@
 
 from towhee import pipe, ops, DataCollection
 import torch
+from fastapi import FastAPI, UploadFile, File
+import uvicorn
+import os
 
 
 audio = './track04_sour_le_vent.wav'
@@ -24,12 +27,29 @@ if torch.cuda.is_available():
     device = 'cuda'
 else:
     device = 'cpu'
+def get_audio_embeddings(audio_path):
+    p = (
+        pipe.input("path")
+            .map('path', 'frame', ops.audio_decode.ffmpeg())
+            .map('frame', 'vecs', ops.audio_embedding.nnfp(device=device))
+            .output('path', 'vecs')
+    )
+    return DataCollection(p(audio_path)).to_list()
 
-p = (
-    pipe.input("path")
-        .map('path', 'frame', ops.audio_decode.ffmpeg())
-        .map('frame', 'vecs', ops.audio_embedding.nnfp(device=device))
-        .output('path', 'vecs')
-)
+embeddings = get_audio_embeddings(audio)
+print(embeddings)
 
-DataCollection(p('track04_sour_le_vent.wav')).show()
+app = FastAPI()
+
+@app.post("/upload_audio/")
+async def upload_audio(file: UploadFile = File(...)):
+    file_location = f"/tmp/{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        file_object.write(file.file.read())
+    
+    embeddings = get_audio_embeddings(file_location)
+    os.remove(file_location)
+    return {"embeddings": embeddings}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

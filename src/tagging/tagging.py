@@ -12,12 +12,11 @@ from pydantic import BaseModel
 import uvicorn
 from opensearchpy import OpenSearch
 
-# model_fpath="topel/ConvNeXt-Tiny-AT"
+model_fpath="topel/ConvNeXt-Tiny-AT"
 
 # AUDIO_NAME = 'track3.wav'
-def process_audio(audio_name, model_fpath="topel/ConvNeXt-Tiny-AT", threshold=0.25):
-  AUDIO_PATH = os.path.join("./", audio_name)
-
+def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT", threshold=0.25):
+  AUDIO_PATH = file_location
   model = ConvNeXt.from_pretrained(model_fpath, use_auth_token=None, map_location='cpu')
 
   if torch.cuda.is_available():
@@ -107,14 +106,14 @@ def process_audio(audio_name, model_fpath="topel/ConvNeXt-Tiny-AT", threshold=0.
 app = FastAPI()
 
 class AudioRequest(BaseModel):
-  audio_name: str = 'track3.wav'
-  model_fpath: str = 'topel/ConvNeXt-Tiny-AT'
-  threshold: float = 0.25
+  file: bytes
+  audio_name: str
 
 @app.post("/process_audio")
 async def process_audio_api(request: AudioRequest):
   try:
-    tags, probs, sample_labels = process_audio(request.audio_name, request.model_fpath, request.threshold)
+    file_location = f"/tmp/{request.audio_name}"
+    tags, probs, sample_labels = process_audio(file_location, request.file,request.audio_name)
     return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": probs[0].tolist()}
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
