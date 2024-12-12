@@ -16,6 +16,9 @@ services:
         hard: -1
     ports:
       - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - openseach-data:/usr/share/opensearch/data
     networks:
       - app-network
 
@@ -53,6 +56,8 @@ services:
     container_name: tagging
     networks:
       - app-network
+    depends_on:
+      - opensearch
 
 networks:
   app-network:

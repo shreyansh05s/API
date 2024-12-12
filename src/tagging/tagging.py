@@ -101,7 +101,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
 
   # Initialize OpenSearch client
   client = OpenSearch(
-    hosts=[{'host': 'localhost', 'port': 9200}],
+    hosts=[{'host': 'opensearch', 'port': 9200}],
     http_auth=('admin', 'admin'),
     use_ssl=False,
     verify_certs=False,
