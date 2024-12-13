@@ -48,18 +48,18 @@ if uploaded_file is not None:
         tagging_response = requests.post(tagging_api_url, files=files)
         # embedding_response = requests.post(embedding_api_url, files=files, data={"filename": uploaded_file.name})
         
-        if tagging_response.status_code == 200 and embedding_response == 200:
-            st.write("File successfully uploaded.")
+        st.write("Tagging Status Code:", tagging_response.status_code)
+        # st.write("Tagging response:", tagging_response.content)
+        
+        if tagging_response.status_code == 200:
+            st.write("File successfully Tagged.")
+            # show the tags
+            labels = tagging_response.json()["labels"]	
+            probs = tagging_response.json()["probabilities"]
+            st.write("Tags:", labels)
+            st.write("Probabilities:", probs)
+            
         else:
-            st.write("Error: File upload failed.")
+            st.write("Error: Unable to tag the file.")
 else:
     st.error("No file is provided")
-
-if tagging_response is not None and embedding_response is not None:
-    try:
-        response_data = tagging_response.json()
-        st.write("Tagging Response:")
-        for key, value in response_data.items():
-            st.write(f"{key}: {value}")
-    except ValueError:
-        st.write("Error: Unable to parse tagging response.")

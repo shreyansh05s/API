@@ -104,10 +104,10 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   client = OpenSearch(
     hosts=[{'host': 'opensearch', 'port': 9200}],
     http_auth=('admin', 'Duck1Teddy#Open'),
-    use_ssl=False,
+    use_ssl=True,
     verify_certs=False,
-    ssl_assert_hostname=False,
-    ssl_show_warn=False,
+    # ssl_assert_hostname=False,
+    # ssl_show_warn=False,
   )
 
   # Prepare data to be indexed
