@@ -7,10 +7,11 @@ import torchaudio.functional as TAF
 
 from audioset_convnext_inf.pytorch.convnext import ConvNeXt
 from audioset_convnext_inf.utils.utilities import read_audioset_label_tags
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import uvicorn
 from opensearchpy import OpenSearch
+from uuid import uuid4
 
 model_fpath="topel/ConvNeXt-Tiny-AT"
 
@@ -102,7 +103,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   # Initialize OpenSearch client
   client = OpenSearch(
     hosts=[{'host': 'opensearch', 'port': 9200}],
-    http_auth=('admin', 'admin'),
+    http_auth=('admin', 'Duck1Teddy#Open'),
     use_ssl=False,
     verify_certs=False,
     ssl_assert_hostname=False,
@@ -130,17 +131,21 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
 app = FastAPI()
 
 class AudioRequest(BaseModel):
-  file: bytes
   audio_name: str
 
 @app.post("/process_audio")
-async def process_audio_api(request: AudioRequest):
+async def process_audio_api(file: UploadFile = File(...)):
   try:
-    file_location = f"/tmp/{request.audio_name}"
-    tags, probs, sample_labels = process_audio(file_location, request.file,request.audio_name)
-    return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": probs[0].tolist()}
+      audio_name = str(uuid4())
+      file_location = f"/tmp/{audio_name}"
+      with open(file_location, "wb") as f:
+          f.write(await file.read())
+      tags, probs, sample_labels = process_audio(file_location, audio_name)
+      return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": probs[0].tolist()}
   except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+      print(e)
+      raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == '__main__':
   uvicorn.run(app, host="0.0.0.0", port=8000)

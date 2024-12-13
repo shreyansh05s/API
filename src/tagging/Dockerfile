@@ -14,6 +14,7 @@ RUN pip install -r requirements.txt
 RUN pip install python-multipart
 
 # Copy the tagging.py
+COPY class_labels_indices.csv .
 COPY tagging.py .
 
 # Expose the API on port 8000
