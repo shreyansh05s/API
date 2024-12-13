@@ -5,9 +5,9 @@ import streamlit as st
 opensearch_url = "http://opensearch:9200"
 
 # Label Studio configuration
-label_studio_url = "http://label-studio:8080"
+# label_studio_url = "http://label-studio:8080"
 
-st.title("Streamlit Interface for OpenSearch and Label Studio")
+st.title("Streamlit Interface for OpenSearch")
 
 # Test OpenSearch Connection
 try:
@@ -17,11 +17,11 @@ except requests.ConnectionError:
     st.write("Error: Unable to connect to OpenSearch.")
 
 # Test Label Studio Connection
-try:
-    response = requests.get(f"{label_studio_url}/api/projects", headers={"Authorization": "Token YOUR_LABEL_STUDIO_API_KEY"})
-    st.write("Label Studio Projects:", response.json())
-except requests.ConnectionError:
-    st.write("Error: Unable to connect to Label Studio.")
+# try:
+#     response = requests.get(f"{label_studio_url}/api/projects", headers={"Authorization": "Token YOUR_LABEL_STUDIO_API_KEY"})
+#     st.write("Label Studio Projects:", response.json())
+# except requests.ConnectionError:
+#     st.write("Error: Unable to connect to Label Studio.")
 
 # File upload section
 uploaded_file = st.file_uploader("Choose a file", type=["wav", "mp3"])
@@ -42,7 +42,7 @@ if uploaded_file is not None:
         # Send file to the API
         files = {"file": (uploaded_file.name, file_content)}
         tagging_response = requests.post(tagging_api_url, files=files, data={"filename": uploaded_file.name})
-        embedding_response = requests.post(embedding_api_url, files=files, data={"filename": uploaded_file.name})
+        # embedding_response = requests.post(embedding_api_url, files=files, data={"filename": uploaded_file.name})
         
         if tagging_response.status_code == 200 and embedding_response == 200:
             st.write("File successfully uploaded.")

@@ -19,20 +19,20 @@ services:
       - "9600:9600"
     # volumes:
     #   - openseach-data:/usr/share/opensearch/data
-    network_mode: host
+    network_mode: bridge
 
-  label-studio:
-    build:
-      context: ./label-studio
-      dockerfile: Dockerfile
-    container_name: label-studio
-    environment:
-      - LABEL_STUDIO_HOST=http://label-studio:8080
-    ports:
-      - "8080:8080"
-    depends_on:
-      - opensearch
-    network_mode: host
+  # label-studio:
+  #   build:
+  #     context: ./label-studio
+  #     dockerfile: Dockerfile
+  #   container_name: label-studio
+  #   environment:
+  #     - LABEL_STUDIO_HOST=http://label-studio:8080
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - opensearch
+  #   network_mode: host
 
   streamlit-ui:
     build:
@@ -43,14 +43,15 @@ services:
       - "8501:8501"
     depends_on:
       - opensearch
-      - label-studio
-    network_mode: host
+    network_mode: bridge
 
   tagging:
     build:
       context: ./tagging
       dockerfile: Dockerfile
     container_name: tagging
-    network_mode: host
+    ports:
+      - "8000:8000"
+    network_mode: bridge
     depends_on:
       - opensearch
