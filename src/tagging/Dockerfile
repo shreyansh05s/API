@@ -7,6 +7,12 @@ WORKDIR /app
 # install git
 RUN apt-get update && apt-get install -y git
 
+RUN apt-get update && apt-get install -y --no-install-recommends apt-utils
+RUN apt-get -y install curl
+RUN apt-get install -y libgomp1 libsndfile1 libsndfile1-dev ffmpeg sox libsox-fmt-all
+#RUN apt-get install libgomp1
+
+
 # Copy requirements and install dependencies
 COPY requirements.txt .
 RUN pip install -r requirements.txt
