@@ -6,3 +6,4 @@ fastapi
 uvicorn
 opensearch-py
 git+https://github.com/topel/audioset-convnext-inf@pip-install
+soundfile
