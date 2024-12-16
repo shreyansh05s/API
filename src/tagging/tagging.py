@@ -162,7 +162,10 @@ async def process_audio_api(file: UploadFile = File(...)):
 @app.post("/train")
 async def train_model(data: dict):
   try:
-    return {"status": "success", "message": "Training started"}
+    model = data.get("model")
+    if not model:
+      raise HTTPException(status_code=400, detail="Model data is required")
+    return {"status": "success", "message": f"Training started for {model}"}
   except Exception as e:
     print(e)
     raise HTTPException(status_code=500, detail=str(e))
