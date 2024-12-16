@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import uvicorn
 from opensearchpy import OpenSearch
 from uuid import uuid4
+import requests
 
 model_fpath="topel/ConvNeXt-Tiny-AT"
 
@@ -70,9 +71,12 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
     with torch.no_grad():
       model.eval()
       output = model(clip)
+  
+      emb_output = model.forward_scene_embeddings(clip)
+      emb_output = emb_output[0].tolist()
 
       # Gettings logits and probabilities
-      logits = output["clipwise_logits"]
+      # logits = output["clipwise_logits"]
       probs = output["clipwise_output"]
 
       lb_to_ix, ix_to_lb, id_to_ix, ix_to_id = read_audioset_label_tags(os.path.join(current_dir, "class_labels_indices.csv"))
@@ -81,7 +85,8 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
       clip_data = {
         "clip_position": i,
         "clip_labels": [ix_to_lb[l] for l in clip_labels],
-        "clip_probabilities": probs[0].tolist()
+        "clip_probabilities": probs[0].tolist(),
+        "clip_embedding": emb_output
       }
       all_clips_data.append(clip_data)
       ++i;
@@ -103,14 +108,14 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
         data["average_probability"] /= data["count"]
 
   # Scene level embeddings
-  with torch.no_grad():
-    model.eval()
-    output = model.forward_scene_embeddings(waveform)
+  # with torch.no_grad():
+  #   model.eval()
 
-  # Frame level embeddings
-  with torch.no_grad():
-    model.eval()
-    output = model.forward_frame_embeddings(waveform)
+
+  # # Frame level embeddings
+  # with torch.no_grad():
+  #   model.eval()
+  #   output = model.forward_frame_embeddings(waveform)
 
   # Initialize OpenSearch client
   client = OpenSearch(
@@ -178,8 +183,41 @@ async def update_model(data: dict):
   except Exception as e:
     print(e)
     raise HTTPException(status_code=500, detail=str(e))
-
-
+  
 
 if __name__ == '__main__':
+  index_name = "audio_labels"
+  url = f"http://localhost:9200/{index_name}"
+  headers = {"Content-Type": "application/json"}
+  data = {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "properties": {
+        "audio_name": {"type": "keyword"},
+        "clip_information": {
+         "type": "nested",  # Define clip_information as a nested type
+         "properties": {
+            "clip_position": { "type": "integer" },
+            "clip_labels": { "type": "text" },
+            "clip_probabilities": { "type": "float" },
+            "clip_embedding": { "type": "dense_vector", "dims": 768 }  # Example dims
+          }
+        },
+        "avg_data": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "text" },                  # Array of text values (supports full-text search)
+            "average_probability": { "type": "float" },  # Array of floating-point values
+            "count": { "type": "integer" }               # Array of integer values
+          }
+        },
+      }
+    }
+  }
+
+  response = requests.put(url, headers=headers, json=data)
+  print(response.json())
   uvicorn.run(app, host="0.0.0.0", port=8000, debug=True)
