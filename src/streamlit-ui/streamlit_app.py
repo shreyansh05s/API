@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import json
-
+from copy import deepcopy
 
 
 # Global storage for annotations
@@ -98,6 +98,9 @@ def index_audio():
                     "Annotation": labels,
                     "Confidence Score": probs
                 })
+                
+                # df remove duplicates with same label
+                df = df.drop_duplicates(subset=["Annotation"])
 
                 # Update global annotations
                 st.session_state.global_annotations = pd.concat([st.session_state.global_annotations, df], ignore_index=True)
@@ -136,93 +139,105 @@ def index_audio():
                     st.altair_chart(chart, use_container_width=True)
 
                 
-                # allow the user to update the avg_data 
-                col_1, _, col_2 = st.columns([1, 0.2, 2])
-                
-                with col_1:
-                    # First fetch similar audio files using the vector embeddings from opensearch
-                    opensearch_url = "https://opensearch:9200"
+                with st.expander("Update Auto-Tagged Data"):
                     
-                    # get current audio embeddings
-                    query = {
-                        "query": {
-                            "match": {
-                                "audio_name": uploaded_file.name
-                            }
-                        }
-                    }
-                    response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
-                    results = response.json()
+                    # allow the user to update the avg_data 
+                    col_1, _, col_2 = st.columns([2, 0.2, 2])
                     
-                    # get the embeddings
-                    if results["hits"]["total"]["value"] > 0:
-            
-                        embeddings = results["hits"]["hits"][0]["_source"]["clip_embedding"]
+                    with col_1:
+                        # First fetch similar audio files using the vector embeddings from opensearch
+                        opensearch_url = "https://opensearch:9200"
                         
-                        # get similar audio files
+                        # get current audio embeddings
                         query = {
                             "query": {
-                                "knn": {
-                                    "clip_embedding": {
-                                        "vector": embeddings,
-                                        "k": 5
-                                    }
+                                "match": {
+                                    "audio_name": uploaded_file.name
                                 }
                             }
                         }
                         response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
                         results = response.json()
                         
-                        st.json(results)
-                        
-                        # create graph
-                        if results and 'hits' in results and results['hits'].get('hits', []):
-                            search_visualization_data = []
+                        # get the embeddings
+                        if results["hits"]["total"]["value"] > 0:
+                
+                            embeddings = results["hits"]["hits"][0]["_source"]["clip_embedding"]
                             
-                            for hit in results["hits"]["hits"]:
-                                source = hit.get("_source", {})
-                                audio_name = source.get("audio_name", "N/A")
-                                clip_information = source.get("clip_information", {})
-                                if not clip_information:
-                                    st.warning(f"No clip information found for {audio_name}")
-                                    continue
-                                clip_labels = clip_information["clip_labels"]
-                                clip_probs = clip_information["clip_probabilities"]
+                            # get similar audio files
+                            query = {
+                                "query": {
+                                    "knn": {
+                                        "clip_embedding": {
+                                            "vector": embeddings,
+                                            "k": 5
+                                        }
+                                    }
+                                }
+                            }
+                            response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
+                            results = response.json()
+                            
+                            # st.json(results)
+                            
+                            # create graph
+                            if results and 'hits' in results and results['hits'].get('hits', []):
+                                search_data = []
                                 
-                            st.write(f"Found {len(clip_labels)} similar audio files:")
-                            st.write("Audio Name:", audio_name)
-                            st.write("Predictions:", clip_probs)
+                                all_labels = []
+                                all_probs = []
                                 
-                            # Create visualization data for similar files
-                            for label, prob in zip(clip_labels, clip_probs):
-                                search_visualization_data.append({
-                                    "Annotation": label,
-                                    "Confidence Score": prob,
-                                    "Audio": audio_name
-                                })
+                                for hit in results["hits"]["hits"]:
+                                    source = hit.get("_source", {})
+                                    audio_name = source.get("audio_name", "N/A")
+                                    clip_information = source.get("clip_information", {})
+                                    avg_data = source.get("avg_data", [])
+                                    if not clip_information:
+                                        st.warning(f"No clip information found for {audio_name}")
+                                        continue
+     
+                                    labels = [item['label'] for item in avg_data]
+                                    probs = [item['average_probability'] for item in avg_data]
+                                    counts = [item['count'] for item in avg_data]
+                                    
+                                    search_data.append({
+                                        "audio_name": audio_name,
+                                        "clip_labels": labels,
+                                        "clip_probs": probs
+                                    })
+            
+                                
+                                # explode the data
+                                search_visualization_data = [
+                                    {"audio_name": item["audio_name"], "Annotation": label, "Confidence Score": prob}
+                                    for item in search_data
+                                    for label, prob in zip(item["clip_labels"], item["clip_probs"])
+                                ]
+                                
+                            
+                                # Convert to DataFrame and create chart
+                                viz_df = pd.DataFrame(search_visualization_data)
+                                # st.write(viz_df.columns)  # Debug: print column names
+                                chart = alt.Chart(viz_df).mark_bar().encode(
+                                    x='Annotation',
+                                    y='Confidence Score',
+                                    color='Annotation',
+                                    tooltip=['Annotation', 'Confidence Score']
+                                ).properties(
+                                    title='Similar Audio Files - Annotations & Confidence Scores'
+                                )
+                                st.altair_chart(chart, use_container_width=True)
+                    with col_2:
+                        # allow the user to mmodify the avg_data
+                        st.write("Modify the Auto-Tagged Data")
+                        # create a table
+                        df = pd.DataFrame(data)
+                        df.drop_duplicates(subset=["label"], inplace=True)
                         
-                            # Convert to DataFrame and create chart
-                            viz_df = pd.DataFrame(search_visualization_data)
-                            st.write(viz_df.columns)  # Debug: print column names
-                            chart = alt.Chart(viz_df).mark_bar().encode(
-                                x='Annotation',
-                                y='Confidence Score',
-                                color='Audio',
-                                tooltip=['Audio', 'Annotation', 'Confidence Score']
-                            ).properties(
-                                title='Similar Audio Files - Annotations & Confidence Scores'
-                            )
-                            st.altair_chart(chart, use_container_width=True)
-                with col_2:
-                    # allow the user to mmodify the avg_data
-                    st.write("Modify the average data")
-                    # create a table
-                    df = pd.DataFrame(data)
-                    
-                    # drop count column
-                    df.drop("count", axis=1, inplace=True)
-                    
-                    st.data_editor(df, on_change=None)
+                        # drop count column
+                        df.drop("count", axis=1, inplace=True)
+                        
+                        st.data_editor(df, on_change=None)
                     
             else:
                 st.write("Error: Unable to tag the file.")  # Handle tagging API errors
