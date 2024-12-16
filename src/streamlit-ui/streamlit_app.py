@@ -157,13 +157,13 @@ def index_audio():
                     # get the embeddings
                     if results["hits"]["total"]["value"] > 0:
             
-                        embeddings = results["hits"]["hits"][0]["_source"]["embeddings"]
+                        embeddings = results["hits"]["hits"][0]["_source"]["clip_embedding"]
                         
                         # get similar audio files
                         query = {
                             "query": {
                                 "knn": {
-                                    "embeddings": {
+                                    "clip_embedding": {
                                         "vector": embeddings,
                                         "k": 5
                                     }
@@ -173,9 +173,46 @@ def index_audio():
                         response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
                         results = response.json()
                         
-                        # display labels and confidence scores
-                        st.write(results)
-                    
+                        st.json(results)
+                        
+                        # create graph
+                        if results and 'hits' in results and results['hits'].get('hits', []):
+                            search_visualization_data = []
+                            
+                            for hit in results["hits"]["hits"]:
+                                source = hit.get("_source", {})
+                                audio_name = source.get("audio_name", "N/A")
+                                clip_information = source.get("clip_information", {})
+                                if not clip_information:
+                                    st.warning(f"No clip information found for {audio_name}")
+                                    continue
+                                clip_labels = clip_information["clip_labels"]
+                                clip_probs = clip_information["clip_probabilities"]
+                                
+                            st.write(f"Found {len(clip_labels)} similar audio files:")
+                            st.write("Audio Name:", audio_name)
+                            st.write("Predictions:", clip_probs)
+                                
+                            # Create visualization data for similar files
+                            for label, prob in zip(clip_labels, clip_probs):
+                                search_visualization_data.append({
+                                    "Annotation": label,
+                                    "Confidence Score": prob,
+                                    "Audio": audio_name
+                                })
+                        
+                            # Convert to DataFrame and create chart
+                            viz_df = pd.DataFrame(search_visualization_data)
+                            st.write(viz_df.columns)  # Debug: print column names
+                            chart = alt.Chart(viz_df).mark_bar().encode(
+                                x='Annotation',
+                                y='Confidence Score',
+                                color='Audio',
+                                tooltip=['Audio', 'Annotation', 'Confidence Score']
+                            ).properties(
+                                title='Similar Audio Files - Annotations & Confidence Scores'
+                            )
+                            st.altair_chart(chart, use_container_width=True)
                 with col_2:
                     # allow the user to mmodify the avg_data
                     st.write("Modify the average data")

@@ -4,6 +4,7 @@ import torch
 from torch.nn import functional as TF
 import torchaudio
 import torchaudio.functional as TAF
+from copy import deepcopy
 
 from audioset_convnext_inf.pytorch.convnext import ConvNeXt
 from audioset_convnext_inf.utils.utilities import read_audioset_label_tags
@@ -126,22 +127,30 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
     # ssl_assert_hostname=False,
     # ssl_show_warn=False,
   )
-
-  # Prepare data to be indexed
-  document = {
-    "audio_name": audio_name,
-    "clip_information": all_clips_data,
-    "avg_data": avg_data
-  }
-
-  # Index the document
-  response = client.index(
-    index="audio_labels",
-    body=document,
-    refresh=True
-  )
-
+  
+  # check what data type is the current index 
+  response = client.indices.get(index="audio_labels")
   print(response)
+  
+  for clip in all_clips_data:
+    
+    temp = deepcopy(clip)
+    del temp["clip_embedding"]
+    
+    document = {
+      "audio_name": audio_name,
+      "clip_embedding": clip["clip_embedding"],
+      "clip_information": temp,
+      "avg_data": avg_data
+    }
+
+    # Index the document
+    response = client.index(
+      index="audio_labels",
+      body=document,
+      refresh=True
+    )
+
   
   return ix_to_lb, probs, clip_labels, all_clips_data, avg_data
 
@@ -154,6 +163,56 @@ class AudioRequest(BaseModel):
 @app.post("/process_audio")
 async def process_audio_api(file: UploadFile = File(...)):
   try:
+        
+      index_name = "audio_labels"
+      url = f"https://opensearch:9200/{index_name}"
+      headers = {"Content-Type": "application/json"}
+      data = {
+        "settings": {
+          "number_of_shards": 1,
+          "number_of_replicas": 0,
+          "index": {
+            "knn": True
+          }
+        },
+        "mappings": {
+          "properties": {
+            "audio_name": {"type": "keyword"},
+            "clip_embedding": { 
+              "type": "knn_vector", 
+              "dimension": 768,
+              "method": {
+                "name": "hnsw", 
+                "space_type": "l2",
+                "engine": "nmslib",
+                "parameters": {
+                  "ef_construction": 128,
+                  "m": 16
+                }
+              }
+            },
+            "clip_information": {
+              "type": "nested",
+              "properties": {
+                "clip_position": { "type": "integer" },
+                "clip_labels": { "type": "text" },
+                "clip_probabilities": { "type": "float" }
+              }
+            },
+            "avg_data": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "text" },
+                "average_probability": { "type": "float" },
+                "count": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+
+      response = requests.put(url, headers=headers, json=data, verify=False, auth=("admin", "Duck1Teddy#Open"))
+      print(response.json())
       audio_name = file.filename
       file_location = f"/tmp/{audio_name}"
       with open(file_location, "wb") as f:
@@ -186,38 +245,4 @@ async def update_model(data: dict):
   
 
 if __name__ == '__main__':
-  index_name = "audio_labels"
-  url = f"http://localhost:9200/{index_name}"
-  headers = {"Content-Type": "application/json"}
-  data = {
-    "settings": {
-      "number_of_shards": 1,
-      "number_of_replicas": 0
-    },
-    "mappings": {
-      "properties": {
-        "audio_name": {"type": "keyword"},
-        "clip_information": {
-         "type": "nested",  # Define clip_information as a nested type
-         "properties": {
-            "clip_position": { "type": "integer" },
-            "clip_labels": { "type": "text" },
-            "clip_probabilities": { "type": "float" },
-            "clip_embedding": { "type": "dense_vector", "dims": 768 }  # Example dims
-          }
-        },
-        "avg_data": {
-          "type": "object",
-          "properties": {
-            "label": { "type": "text" },                  # Array of text values (supports full-text search)
-            "average_probability": { "type": "float" },  # Array of floating-point values
-            "count": { "type": "integer" }               # Array of integer values
-          }
-        },
-      }
-    }
-  }
-
-  response = requests.put(url, headers=headers, json=data)
-  print(response.json())
   uvicorn.run(app, host="0.0.0.0", port=8000, debug=True)
