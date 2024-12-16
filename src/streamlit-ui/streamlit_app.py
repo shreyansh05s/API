@@ -141,7 +141,9 @@ def index_audio():
         st.error("No file is provided")  # Handle the initial state before any file is uploaded
 
 def search_audio():
-     # create a search bar
+    opensearch_url = "https://opensearch:9200"
+    
+    # create a search bar
     search = st.text_input("Search", "")
     
     # search open search
@@ -149,21 +151,22 @@ def search_audio():
         # search for the query
         query = {
             "query": {
-            "function_score": {
-                "query": {
-                "match": {
-                    "clip_information.clip_labels": search
-                }
-                },
-                "boost_mode": "replace",
-                "score_mode": "max",
-                "functions": [
+            "bool": {
+                "should": [
                 {
-                    "field_value_factor": {
-                    "field": "confidence_score",
-                    "factor": 1,
-                    "modifier": "none",
-                    "missing": 1
+                    "match": {
+                    "clip_information.clip_labels": {
+                        "query": search,
+                        "fuzziness": "AUTO"
+                    }
+                    }
+                },
+                {
+                    "match": {
+                    "audio_name": {
+                        "query": search,
+                        "fuzziness": "AUTO"
+                    }
                     }
                 }
                 ]
@@ -173,32 +176,69 @@ def search_audio():
         response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
         results = response.json()
         # st.write(results)
-        
+        grouped_annotations = {}
         # Extract and display search results in a tabular form
         hits = results.get("hits", {}).get("hits", [])
         if hits:
-            st.write(f"Found {len(hits)} results:")
+            
+            search_visualization_data = []
+            
+            # st.write(f"Found {len(hits)} results:")
             data = []
             for hit in hits:
                 source = hit.get("_source", {})
                 audio_name = source.get("audio_name", "N/A")
-                clip_info = source.get("clip_information", [])
-                for clip in clip_info:
-                    clip_labels = ", ".join(clip.get("clip_labels", []))
-                    data.append({"Audio Name": audio_name, "Clip Labels": clip_labels})
-            df = pd.DataFrame(data)
+                # clip_info = source.get("clip_information", [])
+                # for clip in clip_info:
+                #     clip_labels = ", ".join(clip.get("clip_labels", []))
+                #     data.append({"Audio Name": audio_name, "Clip Labels": clip_labels})
+                
+                avg_data = source.get("avg_data", [])
+                
+                search_visualization_data.append({"audio_name": audio_name, **{item["label"]: item["average_probability"] for item in avg_data}})
+                
+
+                
+            df = pd.DataFrame(search_visualization_data)
             
             # only show unique aduio names
-            df = df.drop_duplicates(subset=["Audio Name"])
+            df = df.drop_duplicates(subset=["audio_name"])
+            
+            # keep only the first 10 results
+            df = df.head(10)
+            
+            df.fillna(0, inplace=True)
             
             st.table(df)
-        else:
-            st.write("No results found.")
+            
+            # create a bar chart
+            chart = alt.Chart(df).mark_bar().encode(
+                x='audio_name',
+                y='count()',
+                color='audio_name', 
+                tooltip=['audio_name', 'count()']
+            ).properties(
+                title='Annotations & Confidence Scores'
+            )
+            
+            st.altair_chart(chart, use_container_width=True)
+            
+            # Ensure 'annotation' and 'average_probability' columns exist
+            df_melted = df.melt(id_vars=["audio_name"], var_name="annotation", value_name="average_probability")
 
-def app():
+            # create a heatmap
+            heatmap = alt.Chart(df_melted).mark_rect().encode(
+                x='audio_name',
+                y='annotation',
+                color='average_probability:Q',
+                tooltip=['audio_name', 'annotation', 'average_probability']
+            ).properties(
+                title='Annotations & Confidence Scores'
+            )
+            st.altair_chart(heatmap, use_container_width=True)
+            
 
-    # OpenSearch configuration
-    opensearch_url = "https://opensearch:9200"
+def app():    
 
     tabs = st.tabs(["Index", "Search"])
     
