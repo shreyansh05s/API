@@ -149,7 +149,7 @@ class AudioRequest(BaseModel):
 @app.post("/process_audio")
 async def process_audio_api(file: UploadFile = File(...)):
   try:
-      audio_name = str(uuid4())
+      audio_name = file.filename
       file_location = f"/tmp/{audio_name}"
       with open(file_location, "wb") as f:
           f.write(await file.read())
@@ -158,6 +158,24 @@ async def process_audio_api(file: UploadFile = File(...)):
   except Exception as e:
       print(e)
       raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/train")
+async def train_model(data: dict):
+  try:
+    return {"status": "success", "message": "Training started"}
+  except Exception as e:
+    print(e)
+    raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/update")
+async def update_model(data: dict):
+  try:
+    return {"status": "success", "message": "Update started"}
+  except Exception as e:
+    print(e)
+    raise HTTPException(status_code=500, detail=str(e))
+
 
 
 if __name__ == '__main__':
