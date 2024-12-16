@@ -63,6 +63,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   current_dir = os.getcwd()
   all_clips_data = []
   clip_labels = []
+  avg_data = []
   i = 0
   for clip in clips:
     clip = clip.to(device)
@@ -80,15 +81,26 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
       clip_data = {
         "clip_position": i,
         "clip_labels": [ix_to_lb[l] for l in clip_labels],
-        "clip_probabilities": probs[0].tolist()
+        "clip_probabilities": clip_labels
       }
       all_clips_data.append(clip_data)
       ++i;
-  # Label derivation
-  # sample_labels = np.where(probs[0].clone().detach().cpu() > threshold)[0]
-  # print(sample_labels)
-  # for l in sample_labels:
-  #   print("%s: %.3f" % (ix_to_lb[l], probs[0, l]))
+      for label in clip_labels:
+        if label not in avg_data:
+          avg_data.append({
+        "label": ix_to_lb[label],
+        "average_probability": probs[0, label].item(),
+        "count": 1
+          })
+        else:
+          for data in avg_data:
+            if data["label"] == ix_to_lb[label]:
+              data["average_probability"] += probs[0, label].item()
+              data["count"] += 1
+
+      # Calculate the average probabilities
+      for data in avg_data:
+        data["average_probability"] /= data["count"]
 
   # Scene level embeddings
   with torch.no_grad():
@@ -125,7 +137,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
 
   print(response)
   
-  return ix_to_lb, probs, clip_labels
+  return ix_to_lb, probs, all_clips_data, avg_data
 
 
 app = FastAPI()
@@ -140,12 +152,12 @@ async def process_audio_api(file: UploadFile = File(...)):
       file_location = f"/tmp/{audio_name}"
       with open(file_location, "wb") as f:
           f.write(await file.read())
-      tags, probs, sample_labels = process_audio(file_location, audio_name)
-      return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": probs[0].tolist()}
+      tags, probs, sample_labels, avg_data = process_audio(file_location, audio_name)
+      return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": sample_labels, "average_data": avg_data}
   except Exception as e:
       print(e)
       raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == '__main__':
-  uvicorn.run(app, host="0.0.0.0", port=8000)
+  uvicorn.run(app, host="0.0.0.0", port=8000, debug=True)
