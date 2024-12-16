@@ -236,17 +236,38 @@ def search_audio():
                 title='Annotations & Confidence Scores'
             )
             st.altair_chart(heatmap, use_container_width=True)
-            
+
+
+def training():
+    
+    st.write("Training")
+    
+    # select the model
+    model = st.selectbox("Model", ["ResNet", "VGG", "MobileNet"])
+    
+    # call the training API through tagging
+    if st.button("Train"):
+        # Replace 'your_api_url' with the actual API endpoint
+        tagging_api_url = "http://tagging:8000/train"
+        tagging_response = requests.post(tagging_api_url, json={"body": {"model": model}})
+        
+        if tagging_response.status_code == 200:
+            st.write("Model is being trained!")
+        else:
+            st.write("Error: Unable to train the model.")  # Handle tagging API errors
 
 def app():    
 
-    tabs = st.tabs(["Index", "Search"])
+    tabs = st.tabs(["Index", "Search", "Training"])
     
     with tabs[0]:
         index_audio()
     
     with tabs[1]:
         search_audio()
+        
+    with tabs[2]:
+        training()
     
 
 if __name__ == "__main__":
