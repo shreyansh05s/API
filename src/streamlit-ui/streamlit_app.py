@@ -135,6 +135,58 @@ def index_audio():
                     )
                     st.altair_chart(chart, use_container_width=True)
 
+                
+                # allow the user to update the avg_data 
+                col_1, _, col_2 = st.columns([1, 0.2, 2])
+                
+                with col_1:
+                    # First fetch similar audio files using the vector embeddings from opensearch
+                    opensearch_url = "https://opensearch:9200"
+                    
+                    # get current audio embeddings
+                    query = {
+                        "query": {
+                            "match": {
+                                "audio_name": uploaded_file.name
+                            }
+                        }
+                    }
+                    response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
+                    results = response.json()
+                    
+                    # get the embeddings
+                    if results["hits"]["total"]["value"] > 0:
+            
+                        embeddings = results["hits"]["hits"][0]["_source"]["embeddings"]
+                        
+                        # get similar audio files
+                        query = {
+                            "query": {
+                                "knn": {
+                                    "embeddings": {
+                                        "vector": embeddings,
+                                        "k": 5
+                                    }
+                                }
+                            }
+                        }
+                        response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
+                        results = response.json()
+                        
+                        # display labels and confidence scores
+                        st.write(results)
+                    
+                with col_2:
+                    # allow the user to mmodify the avg_data
+                    st.write("Modify the average data")
+                    # create a table
+                    df = pd.DataFrame(data)
+                    
+                    # drop count column
+                    df.drop("count", axis=1, inplace=True)
+                    
+                    st.data_editor(df, on_change=None)
+                    
             else:
                 st.write("Error: Unable to tag the file.")  # Handle tagging API errors
     else:
@@ -175,7 +227,6 @@ def search_audio():
         }
         response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
         results = response.json()
-        # st.write(results)
         grouped_annotations = {}
         # Extract and display search results in a tabular form
         hits = results.get("hits", {}).get("hits", [])
@@ -183,15 +234,13 @@ def search_audio():
             
             search_visualization_data = []
             
+            # st.json(results)
+            
             # st.write(f"Found {len(hits)} results:")
             data = []
             for hit in hits:
                 source = hit.get("_source", {})
                 audio_name = source.get("audio_name", "N/A")
-                # clip_info = source.get("clip_information", [])
-                # for clip in clip_info:
-                #     clip_labels = ", ".join(clip.get("clip_labels", []))
-                #     data.append({"Audio Name": audio_name, "Clip Labels": clip_labels})
                 
                 avg_data = source.get("avg_data", [])
                 
