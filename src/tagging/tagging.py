@@ -81,7 +81,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
       clip_data = {
         "clip_position": i,
         "clip_labels": [ix_to_lb[l] for l in clip_labels],
-        "clip_probabilities": clip_labels
+        "clip_probabilities": probs[0].tolist()
       }
       all_clips_data.append(clip_data)
       ++i;
@@ -125,7 +125,8 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   # Prepare data to be indexed
   document = {
     "audio_name": audio_name,
-    "clip_information": all_clips_data
+    "clip_information": all_clips_data,
+    "avg_data": avg_data
   }
 
   # Index the document
@@ -137,7 +138,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
 
   print(response)
   
-  return ix_to_lb, probs, all_clips_data, avg_data
+  return ix_to_lb, probs, clip_labels, all_clips_data, avg_data
 
 
 app = FastAPI()
@@ -152,8 +153,8 @@ async def process_audio_api(file: UploadFile = File(...)):
       file_location = f"/tmp/{audio_name}"
       with open(file_location, "wb") as f:
           f.write(await file.read())
-      tags, probs, sample_labels, avg_data = process_audio(file_location, audio_name)
-      return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": sample_labels, "average_data": avg_data}
+      tags, probs, sample_labels, all_data, avg_data = process_audio(file_location, audio_name)
+      return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": all_data, "average_data": avg_data}
   except Exception as e:
       print(e)
       raise HTTPException(status_code=500, detail=str(e))
