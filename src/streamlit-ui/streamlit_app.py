@@ -85,15 +85,18 @@ def index_audio():
                 st.write("Your annotations are ready!")
                 st.markdown("<br><br>", unsafe_allow_html=True)
                 # Extract annotations and probabilities
-                labels = tagging_response.json()["labels"]
-                probs = tagging_response.json()["probabilities"]
-                relevant_probs = probs[:len(labels)]
+                # labels = tagging_response.json()["labels"]
+                data = tagging_response.json()["average_data"]
+                labels = [item['label'] for item in data]
+                probs = [item['average_probability'] for item in data]
+                counts = [item['count'] for item in data]
+                # relevant_probs = probs[:len(labels)]
 
                 # Create a DataFrame with Filename included
                 df = pd.DataFrame({
                     "Filename": [uploaded_file.name] * len(labels),  # Add the filename for all rows
                     "Annotation": labels,
-                    "Confidence Score": relevant_probs
+                    "Confidence Score": probs
                 })
 
                 # Update global annotations
