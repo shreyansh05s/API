@@ -222,7 +222,7 @@ def index_audio():
                                     x='Annotation',
                                     y='Confidence Score',
                                     color='Annotation',
-                                    tooltip=['Annotation', 'Confidence Score']
+                                    tooltip=['Annotation', 'Confidence Score', 'audio_name']
                                 ).properties(
                                     title='Similar Audio Files - Annotations & Confidence Scores'
                                 )
@@ -237,7 +237,7 @@ def index_audio():
                         # drop count column
                         df.drop("count", axis=1, inplace=True)
                         
-                        st.data_editor(df, on_change=None)
+                        st.data_editor(df, on_change=None, num_rows="dynamic", hide_index=True)
                     
             else:
                 st.write("Error: Unable to tag the file.")  # Handle tagging API errors
@@ -255,30 +255,24 @@ def search_audio():
         # search for the query
         query = {
             "query": {
-            "bool": {
-                "should": [
-                {
-                    "match": {
-                    "clip_information.clip_labels": {
-                        "query": search,
-                        "fuzziness": "AUTO"
-                    }
-                    }
-                },
-                {
-                    "match": {
-                    "audio_name": {
-                        "query": search,
-                        "fuzziness": "AUTO"
-                    }
-                    }
+                "bool": {
+                    "should": [
+                        {
+                            "match": {
+                                "avg_data.label": search
+                            }
+                        }
+                    ]
                 }
-                ]
-            }
-            }
+            },
+            "size": 10
         }
         response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
         results = response.json()
+        
+        if not results:
+            st.write("No results found")
+            return
         grouped_annotations = {}
         # Extract and display search results in a tabular form
         hits = results.get("hits", {}).get("hits", [])
@@ -359,16 +353,14 @@ def training():
 
 def app():    
 
-    tabs = st.tabs(["Index", "Search", "Training"])
+    tabs = st.tabs(["Index", "Search"])
     
     with tabs[0]:
         index_audio()
     
     with tabs[1]:
         search_audio()
-        
-    with tabs[2]:
-        training()
+
     
 
 if __name__ == "__main__":
