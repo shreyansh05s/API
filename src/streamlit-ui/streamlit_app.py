@@ -5,7 +5,7 @@ import altair as alt
 import json
 from copy import deepcopy
 
-
+st.set_page_config(page_title="Zero-Shot Audio-Annotator", page_icon="🎵", layout="wide")
 # Global storage for annotations
 if "global_annotations" not in st.session_state:
     st.session_state.global_annotations = pd.DataFrame(columns=["Filename", "Annotation", "Confidence Score"])
