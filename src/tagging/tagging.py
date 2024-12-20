@@ -4,69 +4,245 @@ import torch
 from torch.nn import functional as TF
 import torchaudio
 import torchaudio.functional as TAF
+from copy import deepcopy
 
 from audioset_convnext_inf.pytorch.convnext import ConvNeXt
 from audioset_convnext_inf.utils.utilities import read_audioset_label_tags
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from pydantic import BaseModel
+import uvicorn
+from opensearchpy import OpenSearch
+from uuid import uuid4
+import requests
 
 model_fpath="topel/ConvNeXt-Tiny-AT"
 
-AUDIO_NAME = 'track3.wav'
-AUDIO_PATH = os.path.join("./",AUDIO_NAME)
+# AUDIO_NAME = 'track3.wav'
+def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT", threshold=0.25):
+  AUDIO_PATH = file_location
+  model = ConvNeXt.from_pretrained(model_fpath, use_auth_token=None, map_location='cpu')
 
-model = ConvNeXt.from_pretrained(model_fpath, use_auth_token=None, map_location='cpu')
+  if torch.cuda.is_available():
+    device = torch.device("cuda")
+  else:
+    device = torch.device("cpu")
 
-if torch.cuda.is_available():
-  device = torch.device("cuda")
-else:
-  device = torch.device("cpu")
+  if "cuda" in str(device):
+    model = model.to(device)
 
-if "cuda" in str(device):
-  model = model.to(device)
+  sample_rate = 32000
+  audio_target_length = 10 * sample_rate
 
-sample_rate = 32000
-audio_target_length = 10 * sample_rate
-
-waveform, sample_rate_ = torchaudio.load(AUDIO_PATH)
-if sample_rate_ != sample_rate:
-  waveform = TAF.resample(
+  # Resampling to 32K 
+  waveform, sample_rate_ = torchaudio.load(AUDIO_PATH)
+  if sample_rate_ != sample_rate:
+    waveform = TAF.resample(
       waveform,
       sample_rate_,
       sample_rate,
+    )
+
+  # clipping to the desired length
+  # ToDo:   Clip the entire audio file into 10s clips
+  if waveform.shape[-1] < audio_target_length:
+    missing = max(audio_target_length - waveform.shape[-1], 0)
+    waveform = TF.pad(waveform, (0, missing), mode="constant", value=0.0)
+  elif waveform.shape[-1] > audio_target_length:
+    waveform = waveform[:, :audio_target_length]
+    clips = []
+    step = sample_rate * 7  # 10 seconds - 3 seconds overlap
+    for start in range(0, waveform.shape[-1], step):
+      end = start + audio_target_length
+      clip = waveform[:, start:end]
+      if clip.shape[-1] < audio_target_length:
+        missing = max(audio_target_length - clip.shape[-1], 0)
+        clip = TF.pad(clip, (0, missing), mode="constant", value=0.0)
+      clip = clip.contiguous()
+      clips.append(clip)
+
+  # waveform = waveform.contiguous()
+  # waveform = waveform.to(device)
+  current_dir = os.getcwd()
+  all_clips_data = []
+  clip_labels = []
+  avg_data = []
+  i = 0
+  for clip in clips:
+    clip = clip.to(device)
+    with torch.no_grad():
+      model.eval()
+      output = model(clip)
+  
+      emb_output = model.forward_scene_embeddings(clip)
+      emb_output = emb_output[0].tolist()
+
+      # Gettings logits and probabilities
+      # logits = output["clipwise_logits"]
+      probs = output["clipwise_output"]
+
+      lb_to_ix, ix_to_lb, id_to_ix, ix_to_id = read_audioset_label_tags(os.path.join(current_dir, "class_labels_indices.csv"))
+      # Append data for each clip
+      clip_labels = np.where(probs[0].clone().detach().cpu() > threshold)[0]
+      clip_data = {
+        "clip_position": i,
+        "clip_labels": [ix_to_lb[l] for l in clip_labels],
+        "clip_probabilities": probs[0].tolist(),
+        "clip_embedding": emb_output
+      }
+      all_clips_data.append(clip_data)
+      ++i;
+      for label in clip_labels:
+        if label not in avg_data:
+          avg_data.append({
+        "label": ix_to_lb[label],
+        "average_probability": probs[0, label].item(),
+        "count": 1
+          })
+        else:
+          for data in avg_data:
+            if data["label"] == ix_to_lb[label]:
+              data["average_probability"] += probs[0, label].item()
+              data["count"] += 1
+
+      # Calculate the average probabilities
+      for data in avg_data:
+        data["average_probability"] /= data["count"]
+
+  # Scene level embeddings
+  # with torch.no_grad():
+  #   model.eval()
+
+
+  # # Frame level embeddings
+  # with torch.no_grad():
+  #   model.eval()
+  #   output = model.forward_frame_embeddings(waveform)
+
+  # Initialize OpenSearch client
+  client = OpenSearch(
+    hosts=[{'host': 'opensearch', 'port': 9200}],
+    http_auth=('admin', 'Duck1Teddy#Open'),
+    use_ssl=True,
+    verify_certs=False,
+    # ssl_assert_hostname=False,
+    # ssl_show_warn=False,
   )
+  
+  # check what data type is the current index 
+  response = client.indices.get(index="audio_labels")
+  print(response)
+  
+  for clip in all_clips_data:
+    
+    temp = deepcopy(clip)
+    del temp["clip_embedding"]
+    
+    document = {
+      "audio_name": audio_name,
+      "clip_embedding": clip["clip_embedding"],
+      "clip_information": temp,
+      "avg_data": avg_data
+    }
 
-if waveform.shape[-1] < audio_target_length:
-  missing = max(audio_target_length - waveform.shape[-1],0)
-  waveform = TF.pad(waveform,(0,missing),mode="constant", value=0.0)
-elif waveform.shape[-1] > audio_target_length:
-  waveform = waveform[:,:audio_target_length]
+    # Index the document
+    response = client.index(
+      index="audio_labels",
+      body=document,
+      refresh=True
+    )
 
-waveform = waveform.contiguous()
-waveform = waveform.to(device)
+  
+  return ix_to_lb, probs, clip_labels, all_clips_data, avg_data
 
-with torch.no_grad():
-  model.eval()
-  output = model(waveform)
 
-logits = output["clipwise_logits"]
+app = FastAPI()
 
-probs = output["clipwise_output"]
+class AudioRequest(BaseModel):
+  audio_name: str
 
-current_dir = os.getcwd()
-lb_to_ix, ix_to_lb, id_to_ix, ix_to_id = read_audioset_label_tags(os.path.join(current_dir,"class_labels_indices.csv"))
+@app.post("/process_audio")
+async def process_audio_api(file: UploadFile = File(...)):
+  try:
+        
+      index_name = "audio_labels"
+      url = f"https://opensearch:9200/{index_name}"
+      headers = {"Content-Type": "application/json"}
+      data = {
+        "settings": {
+          "number_of_shards": 1,
+          "number_of_replicas": 0,
+          "index": {
+            "knn": True
+          }
+        },
+        "mappings": {
+          "properties": {
+            "audio_name": {"type": "keyword"},
+            "clip_embedding": { 
+              "type": "knn_vector", 
+              "dimension": 768,
+              "method": {
+                "name": "hnsw", 
+                "space_type": "l2",
+                "engine": "nmslib",
+                "parameters": {
+                  "ef_construction": 128,
+                  "m": 16
+                }
+              }
+            },
+            "clip_information": {
+              "type": "nested",
+              "properties": {
+                "clip_position": { "type": "integer" },
+                "clip_labels": { "type": "text" },
+                "clip_probabilities": { "type": "float" }
+              }
+            },
+            "avg_data": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "text" },
+                "average_probability": { "type": "float" },
+                "count": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
 
-# Label derivation
-threshold = 0.25
-sample_labels = np.where(probs[0].clone().detach().cpu() > threshold)[0]
-print(sample_labels)
-for l in sample_labels:
-    print("%s: %.3f"%(ix_to_lb[l], probs[0,l]))
+      response = requests.put(url, headers=headers, json=data, verify=False, auth=("admin", "Duck1Teddy#Open"))
+      print(response.json())
+      audio_name = file.filename
+      file_location = f"/tmp/{audio_name}"
+      with open(file_location, "wb") as f:
+          f.write(await file.read())
+      tags, probs, sample_labels, all_data, avg_data = process_audio(file_location, audio_name)
+      return {"status": "success", "labels": [tags[l] for l in sample_labels], "probabilities": all_data, "average_data": avg_data}
+  except Exception as e:
+      print(e)
+      raise HTTPException(status_code=500, detail=str(e))
 
-# Scene level embeddings
-with torch.no_grad():
-  model.eval()
-  output = model.forward_scene_embeddings(waveform)
+@app.post("/train")
+async def train_model(data: dict):
+  try:
+    model = data.get("model")
+    if not model:
+      raise HTTPException(status_code=400, detail="Model data is required")
+    return {"status": "success", "message": f"Training started for {model}"}
+  except Exception as e:
+    print(e)
+    raise HTTPException(status_code=500, detail=str(e))
 
-# Frame level embneddings
-with torch.no_grad():
-  model.eval()
-  output = model.forward_frame_embeddings(waveform)
+
+@app.post("/update")
+async def update_model(data: dict):
+  try:
+    return {"status": "success", "message": "Update started"}
+  except Exception as e:
+    print(e)
+    raise HTTPException(status_code=500, detail=str(e))
+  
+
+if __name__ == '__main__':
+  uvicorn.run(app, host="0.0.0.0", port=8000, debug=True)

@@ -16,22 +16,9 @@ services:
         hard: -1
     ports:
       - "9200:9200"
-    networks:
-      - app-network
-
-  label-studio:
-    build:
-      context: ./label-studio
-      dockerfile: Dockerfile
-    container_name: label-studio
-    environment:
-      - LABEL_STUDIO_HOST=http://label-studio:8080
-    ports:
-      - "8080:8080"
-    depends_on:
-      - opensearch
-    networks:
-      - app-network
+      # - "9600:9600"
+    # volumes:
+    #   - openseach-data:/usr/share/opensearch/data
 
   streamlit-ui:
     build:
@@ -40,12 +27,13 @@ services:
     container_name: streamlit-ui
     ports:
       - "8501:8501"
-    depends_on:
-      - opensearch
-      - label-studio
-    networks:
-      - app-network
+    volumes:
+      - ./streamlit-ui:/app
 
-networks:
-  app-network:
-    driver: host
+  tagging:
+    build:
+      context: ./tagging
+      dockerfile: Dockerfile
+    container_name: tagging
+    ports:
+      - "8000:8000"
