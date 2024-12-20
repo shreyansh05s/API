@@ -1,5 +1,4 @@
-# API
-Audio Processing and Indexing Tool
+# Scalable Tagging and Indexing
 
 ## How to run
 
