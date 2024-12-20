@@ -1,6 +1,17 @@
 # API
 Audio Processing and Indexing Tool
 
+## How to run
+
+### Pre-requisites
+We assume ```docker``` and ```docker-compose``` to be available on your system, if not then they can be installed using the package manager of your choice for your platform.
+
+Open a terminal on the ```src``` folder of this project and run the following command
+   ``` docker-compose up```
+Wait for a couple of minutes for all services to run 
+
+The UI is available on ```0.0.0.0:8501```
+
 ## Indexing
 For indexing we are making use of the Opensearch engine for effecient index management in a machine learing environment. In this environment we are performing 2 types of indexing of two different data which are internally linked for a better kNN classification for genre classifcation
 
@@ -15,13 +26,5 @@ Any '.wav' can be used for the input, the processing works best for a 10s clip o
 [AudioSet](https://research.google.com/audioset/) is the dataset used during training and testing of the model.
 Fine tuning can be done through additional dataset augmentation but we haev gone with the default dataset due to its size and coverage in annotation.
 
-To run the tagging service, make sure to install the pre-requisites through a pip install
-```
-pip install git+https://github.com/topel/audioset-convnext-inf@pip-install
-```
 
-To run the tagging servive, execute the below command
-```
-python tagging.py
-```
 
