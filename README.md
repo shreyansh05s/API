@@ -71,4 +71,4 @@ streamlit run streamlit_app.py
 
 ## Course Context
 
-Audio Processing and Indexing (API) — Semester 4, VU Amsterdam AI Master's programme.
+Audio Processing and Indexing (API) — Semester 4, Leiden University MSc Computer Science (AI) programme.
