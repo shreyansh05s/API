@@ -25,6 +25,8 @@ services:
       context: ./streamlit-ui
       dockerfile: Dockerfile
     container_name: streamlit-ui
+    environment:
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD:?set OPENSEARCH_INITIAL_ADMIN_PASSWORD}
     ports:
       - "8501:8501"
     volumes:
@@ -35,5 +37,7 @@ services:
       context: ./tagging
       dockerfile: Dockerfile
     container_name: tagging
+    environment:
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD:?set OPENSEARCH_INITIAL_ADMIN_PASSWORD}
     ports:
       - "8000:8000"

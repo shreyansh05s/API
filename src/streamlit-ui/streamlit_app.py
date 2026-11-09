@@ -1,9 +1,12 @@
+import os
 import requests
 import streamlit as st
 import pandas as pd
 import altair as alt
 import json
 from copy import deepcopy
+
+OPENSEARCH_PASSWORD = os.environ.get("OPENSEARCH_PASSWORD", os.environ.get("OPENSEARCH_INITIAL_ADMIN_PASSWORD", ""))
 
 st.set_page_config(page_title="Zero-Shot Audio-Annotator", page_icon="🎵", layout="wide")
 # Global storage for annotations
@@ -16,7 +19,7 @@ if "global_annotations" not in st.session_state:
 
 # # Test OpenSearch Connection
 # try:
-#     response = requests.get(f"{opensearch_url}/_cluster/health", verify=False, auth=('admin', 'Duck1Teddy#Open'))
+#     response = requests.get(f"{opensearch_url}/_cluster/health", verify=False, auth=('admin', OPENSEARCH_PASSWORD))
 # except requests.ConnectionError as e:
 #     st.write(e)
 #     st.write("Error: Unable to connect to OpenSearch.")
@@ -156,7 +159,7 @@ def index_audio():
                                 }
                             }
                         }
-                        response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
+                        response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', OPENSEARCH_PASSWORD))
                         results = response.json()
                         
                         # get the embeddings
@@ -175,7 +178,7 @@ def index_audio():
                                     }
                                 }
                             }
-                            response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
+                            response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', OPENSEARCH_PASSWORD))
                             results = response.json()
                             
                             # st.json(results)
@@ -267,7 +270,7 @@ def search_audio():
             },
             "size": 10
         }
-        response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', 'Duck1Teddy#Open'))
+        response = requests.post(f"{opensearch_url}/audio_labels/_search", json=query, verify=False, auth=('admin', OPENSEARCH_PASSWORD))
         results = response.json()
         
         if not results:

@@ -12,7 +12,10 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import uvicorn
 from opensearchpy import OpenSearch
+
+OPENSEARCH_PASSWORD = os.environ.get("OPENSEARCH_PASSWORD", os.environ.get("OPENSEARCH_INITIAL_ADMIN_PASSWORD", ""))
 from uuid import uuid4
+import os
 import requests
 
 model_fpath="topel/ConvNeXt-Tiny-AT"
@@ -121,7 +124,7 @@ def process_audio(file_location, audio_name, model_fpath="topel/ConvNeXt-Tiny-AT
   # Initialize OpenSearch client
   client = OpenSearch(
     hosts=[{'host': 'opensearch', 'port': 9200}],
-    http_auth=('admin', 'Duck1Teddy#Open'),
+    http_auth=('admin', OPENSEARCH_PASSWORD),
     use_ssl=True,
     verify_certs=False,
     # ssl_assert_hostname=False,
@@ -211,7 +214,7 @@ async def process_audio_api(file: UploadFile = File(...)):
         }
       }
 
-      response = requests.put(url, headers=headers, json=data, verify=False, auth=("admin", "Duck1Teddy#Open"))
+      response = requests.put(url, headers=headers, json=data, verify=False, auth=("admin", OPENSEARCH_PASSWORD))
       print(response.json())
       audio_name = file.filename
       file_location = f"/tmp/{audio_name}"
